@@ -1,3 +1,4 @@
+// app/layout.tsx
 import "./global.css";
 
 export const metadata = {
@@ -12,7 +13,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id">
-      <body>{children}</body>
+      <body>
+        {children}
+      </body>
     </html>
   );
 }
