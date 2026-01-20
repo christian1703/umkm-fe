@@ -1,5 +1,4 @@
-// app/(dashboard)/admin/transaksi/services/transaksiService.ts
-import { api } from '@/lib/api'; // Adjust path based on your API client location
+import { api } from '@/lib/api';
 
 export interface Transaction {
   id: string;
@@ -9,12 +8,29 @@ export interface Transaction {
   amount: string;
   isDeleted: boolean;
   file: string;
+  detail?: DetailTransaction[];
+}
+
+interface DetailTransaction{
+  id: string,
+  name: string,
+  amount:number,
+  quantity:number
 }
 
 export const transaksiService = {
   async getAll(): Promise<Transaction[]> {
     try {
-      const response = await api.get('/transaksi/get-all');
+      const response = await api.post('/transaksi/get-all');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      throw error;
+    }
+  },
+  async getDetail(id:string): Promise<Transaction> {
+    try {
+      const response = await api.post('/transaksi/get-detail', {id});
       return response.data;
     } catch (error) {
       console.error('Error fetching transactions:', error);

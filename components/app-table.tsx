@@ -5,6 +5,7 @@ import { Search, Plus, Edit, Trash2, Eye, ChevronLeft, ChevronRight, Filter, X, 
 export interface Field {
   key: string;
   label: string;
+  type?: 'text' | 'date' | 'number' | 'amount';
   filterable?: boolean;
   sortable?: boolean;
   render?: (value: any, row: any) => React.ReactNode;
@@ -53,6 +54,47 @@ export interface DataTableProps {
   loading?: boolean;
 }
 
+// Helper function to format dates
+const formatDate = (value: any): string => {
+  if (!value) return '-';
+  
+  try {
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return value.toString();
+    
+    // Format as YYYY-MM-DD or customize as needed
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch (e) {
+    return value.toString();
+  }
+};
+
+// Helper function to format amount to IDR currency
+const formatAmount = (value: any): string => {
+  if (value === null || value === undefined || value === '') return '-';
+  
+  try {
+    // Convert to number if it's a string
+    const numValue = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]/g, '')) : value;
+    
+    if (isNaN(numValue)) return value.toString();
+    
+    // Format to IDR currency
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(numValue);
+  } catch (e) {
+    return value.toString();
+  }
+};
+
 export const DataTable: React.FC<DataTableProps> = ({
   fields,
   data,
@@ -91,6 +133,16 @@ export const DataTable: React.FC<DataTableProps> = ({
           const value = row[field.key];
           if (value === null || value === undefined) return false;
           try {
+            // For date fields, also search in formatted date
+            if (field.type === 'date') {
+              const formattedDate = formatDate(value);
+              return formattedDate.toLowerCase().includes(searchTerm.toLowerCase());
+            }
+            // For amount fields, also search in formatted amount
+            if (field.type === 'amount') {
+              const formattedAmount = formatAmount(value);
+              return formattedAmount.toLowerCase().includes(searchTerm.toLowerCase());
+            }
             return value.toString().toLowerCase().includes(searchTerm.toLowerCase());
           } catch (e) {
             return false;
@@ -107,6 +159,16 @@ export const DataTable: React.FC<DataTableProps> = ({
           const value = row[key];
           if (value === null || value === undefined) return false;
           try {
+            // Find field to check type
+            const field = fields.find(f => f.key === key);
+            if (field?.type === 'date') {
+              const formattedDate = formatDate(value);
+              return formattedDate.toLowerCase().includes(filterValue.toLowerCase());
+            }
+            if (field?.type === 'amount') {
+              const formattedAmount = formatAmount(value);
+              return formattedAmount.toLowerCase().includes(filterValue.toLowerCase());
+            }
             return value.toString().toLowerCase().includes(filterValue.toLowerCase());
           } catch (e) {
             return false;
@@ -127,6 +189,25 @@ export const DataTable: React.FC<DataTableProps> = ({
         if (bVal === null || bVal === undefined) return -1;
         
         try {
+          // For date fields, compare as Date objects
+          const field = fields.find(f => f.key === sortConfig.key);
+          if (field?.type === 'date') {
+            const dateA = new Date(aVal).getTime();
+            const dateB = new Date(bVal).getTime();
+            if (isNaN(dateA)) return 1;
+            if (isNaN(dateB)) return -1;
+            return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+          }
+          
+          // For amount fields, compare as numbers
+          if (field?.type === 'amount') {
+            const numA = typeof aVal === 'string' ? parseFloat(aVal.replace(/[^0-9.-]/g, '')) : aVal;
+            const numB = typeof bVal === 'string' ? parseFloat(bVal.replace(/[^0-9.-]/g, '')) : bVal;
+            if (isNaN(numA)) return 1;
+            if (isNaN(numB)) return -1;
+            return sortConfig.direction === 'asc' ? numA - numB : numB - numA;
+          }
+          
           if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
           if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
           return 0;
@@ -372,6 +453,10 @@ export const DataTable: React.FC<DataTableProps> = ({
                                     return value ?? '-';
                                   }
                                 })()
+                              ) : field.type === 'date' ? (
+                                formatDate(value)
+                              ) : field.type === 'amount' ? (
+                                formatAmount(value)
                               ) : (
                                 value ?? '-'
                               )}

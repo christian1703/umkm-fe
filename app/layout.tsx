@@ -1,5 +1,6 @@
 // app/layout.tsx
 import "./global.css";
+import { Providers } from "./provider";
 
 export const metadata = {
   title: "CatatTrans UMKM",
@@ -14,7 +15,9 @@ export default function RootLayout({
   return (
     <html lang="id">
       <body>
-        {children}
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );
