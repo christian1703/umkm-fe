@@ -13,7 +13,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { Home, Inbox, Settings, ChevronUp, User2, LogOut } from "lucide-react"
+import { Home, Inbox, Settings, ChevronUp, User2, LogOut , UsersRound} from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu"
 import { AppRole } from "@/app/utils/role"
 import { AuthService, User } from "@/app/utils/auth"
@@ -52,11 +52,19 @@ export function AppSidebar() {
             url: "/admin/transaksi",
             icon: Inbox,
         },
+
+        {
+            title: "Manajemen Kasir",
+            url: "/admin/manajemen-kasir",
+            icon: UsersRound,
+        },
+
         {
             title: "Pengaturan",
             url: "/admin/pengaturan",
             icon: Settings,
         },
+
     ]
 
     const itemsKasir = [

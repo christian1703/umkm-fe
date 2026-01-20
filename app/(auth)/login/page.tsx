@@ -29,7 +29,7 @@ export default function LoginPage() {
         if (user.role === "ADMIN") {
           router.push("/admin/home");
         } else {
-          router.push("/kasir/home");
+          router.push("/kasir/transaksi");
         }
       } else {
         setIsChecking(false);

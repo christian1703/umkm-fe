@@ -3,22 +3,24 @@
 import { CustomFilter, DataTable, Field } from "@/components/app-table"
 import { useState } from "react";
 
-export default function KasirTransactionsPage() {
+export default function AdminKasirPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   const sampleData = [
-    { id: 1, jenis_transaksi: 'Penjualan', channel: 'QRIS', nominal: 'Rp 20.000', tanggal: '1 Januari 2026', lampiran: 'struk_001.pdf'},
-    { id: 2, jenis_transaksi: 'Pembelian', channel: 'TUNAI', nominal: 'Rp 40.000', tanggal: '4 Januari 2026', lampiran: 'invoice_002.pdf'},
+    { id: 1, name: 'asep', username : 'asep123', password: 'asep321', nomor_wa:'0812-3921-8174'},
+    { id: 2, name: 'yyyy', username : 'yyy543', password: '(password telah diganti)', nomor_wa:'0812-1234-5678'},
+
   ];
 
   const fields: Field[] = [
     { key: 'id', label: 'ID', sortable: true },
-    { key: 'jenis_transaksi', label: 'Jenis Transaksi', sortable: true, filterable: true },
-    { key: 'channel', label: 'Channel', sortable: true, filterable: true },
-    { key: 'nominal', label: 'Nominal (Rp)', sortable: true, filterable: true },
-    { key: 'tanggal', label: 'Tanggal', sortable: true, filterable: true },
-    { key: 'lampiran', label: 'Lampiran', filterable: true },
+    { key: 'name', label: 'Name', sortable: true, filterable: true },
+    { key: 'username', label: 'Username', filterable: true },
+    { key: 'password', label: 'password', filterable: true },
+    { key: 'nomor_wa', label: 'Nomor WhatsApp', filterable: true },
+    
+   
   ];
 
   const customFilters: CustomFilter[] = [
@@ -40,11 +42,11 @@ export default function KasirTransactionsPage() {
   
   return <>
    <DataTable
-        headerName="Data Transaksi"
+        headerName="Managemen Kasir"
         fields={fields}
         data={sampleData}
         acl={{
-          canView: true,
+          canView: false,
           canAdd: true,
           canUpdate: false,
           canDelete: true,
