@@ -11,7 +11,7 @@ export interface Transaction {
   detail?: DetailTransaction[];
 }
 
-interface DetailTransaction{
+export interface DetailTransaction{
   id: string,
   name: string,
   amount:number,

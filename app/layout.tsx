@@ -1,4 +1,5 @@
 // app/layout.tsx
+import { Toaster } from "@/components/ui/sonner";
 import "./global.css";
 import { Providers } from "./provider";
 
@@ -15,6 +16,7 @@ export default function RootLayout({
   return (
     <html lang="id">
       <body>
+        <Toaster/>
         <Providers>
           {children}
         </Providers>
