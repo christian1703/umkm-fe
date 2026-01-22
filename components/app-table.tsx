@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Edit, Trash2, Eye, ChevronLeft, ChevronRight, Filter, X, Download } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Eye, ChevronLeft, ChevronRight, Filter, X, Download, Columns } from 'lucide-react';
 
 // Type definitions
 export interface Field {
@@ -8,6 +8,7 @@ export interface Field {
   type?: 'text' | 'date' | 'number' | 'amount';
   filterable?: boolean;
   sortable?: boolean;
+  visible?: boolean; // New property to control visibility
   render?: (value: any, row: any) => React.ReactNode;
 }
 
@@ -51,6 +52,7 @@ export interface DataTableProps {
   pagination?: PaginationData;
   onPageChange?: (page: number) => void;
   onPageSizeChange?: (size: number) => void;
+  onFieldsChange?: (fields: Field[]) => void; // New callback for field changes
   loading?: boolean;
 }
 
@@ -62,7 +64,6 @@ const formatDate = (value: any): string => {
     const date = new Date(value);
     if (isNaN(date.getTime())) return value.toString();
     
-    // Format as YYYY-MM-DD or customize as needed
     return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -78,12 +79,10 @@ const formatAmount = (value: any): string => {
   if (value === null || value === undefined || value === '') return '-';
   
   try {
-    // Convert to number if it's a string
     const numValue = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]/g, '')) : value;
     
     if (isNaN(numValue)) return value.toString();
     
-    // Format to IDR currency
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
@@ -111,12 +110,63 @@ export const DataTable: React.FC<DataTableProps> = ({
   pagination,
   onPageChange,
   onPageSizeChange,
+  onFieldsChange,
   loading = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [localFilters, setLocalFilters] = useState<Record<string, string>>({});
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [showColumnSelector, setShowColumnSelector] = useState(false);
+
+  // Initialize column visibility state from fields
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    fields.forEach(field => {
+      initial[field.key] = field.visible !== undefined ? field.visible : true;
+    });
+    return initial;
+  });
+
+  // Get visible fields based on visibility state
+  const visibleFields = useMemo(() => {
+    return fields.filter(field => columnVisibility[field.key] !== false);
+  }, [fields, columnVisibility]);
+
+  // Toggle column visibility
+  const toggleColumnVisibility = (key: string) => {
+    setColumnVisibility(prev => {
+      const newVisibility = { ...prev, [key]: !prev[key] };
+      
+      // Update fields array and call callback
+      if (onFieldsChange) {
+        const updatedFields = fields.map(field => ({
+          ...field,
+          visible: newVisibility[field.key]
+        }));
+        onFieldsChange(updatedFields);
+      }
+      
+      return newVisibility;
+    });
+  };
+
+  // Show/hide all columns
+  const toggleAllColumns = (visible: boolean) => {
+    const newVisibility: Record<string, boolean> = {};
+    fields.forEach(field => {
+      newVisibility[field.key] = visible;
+    });
+    setColumnVisibility(newVisibility);
+    
+    if (onFieldsChange) {
+      const updatedFields = fields.map(field => ({
+        ...field,
+        visible: visible
+      }));
+      onFieldsChange(updatedFields);
+    }
+  };
 
   // Local search filtering
   const filteredData = useMemo(() => {
@@ -133,12 +183,10 @@ export const DataTable: React.FC<DataTableProps> = ({
           const value = row[field.key];
           if (value === null || value === undefined) return false;
           try {
-            // For date fields, also search in formatted date
             if (field.type === 'date') {
               const formattedDate = formatDate(value);
               return formattedDate.toLowerCase().includes(searchTerm.toLowerCase());
             }
-            // For amount fields, also search in formatted amount
             if (field.type === 'amount') {
               const formattedAmount = formatAmount(value);
               return formattedAmount.toLowerCase().includes(searchTerm.toLowerCase());
@@ -159,7 +207,6 @@ export const DataTable: React.FC<DataTableProps> = ({
           const value = row[key];
           if (value === null || value === undefined) return false;
           try {
-            // Find field to check type
             const field = fields.find(f => f.key === key);
             if (field?.type === 'date') {
               const formattedDate = formatDate(value);
@@ -184,12 +231,10 @@ export const DataTable: React.FC<DataTableProps> = ({
         const aVal = a[sortConfig.key];
         const bVal = b[sortConfig.key];
         
-        // Handle null/undefined values
         if (aVal === null || aVal === undefined) return 1;
         if (bVal === null || bVal === undefined) return -1;
         
         try {
-          // For date fields, compare as Date objects
           const field = fields.find(f => f.key === sortConfig.key);
           if (field?.type === 'date') {
             const dateA = new Date(aVal).getTime();
@@ -199,7 +244,6 @@ export const DataTable: React.FC<DataTableProps> = ({
             return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
           }
           
-          // For amount fields, compare as numbers
           if (field?.type === 'amount') {
             const numA = typeof aVal === 'string' ? parseFloat(aVal.replace(/[^0-9.-]/g, '')) : aVal;
             const numB = typeof bVal === 'string' ? parseFloat(bVal.replace(/[^0-9.-]/g, '')) : bVal;
@@ -251,6 +295,7 @@ export const DataTable: React.FC<DataTableProps> = ({
   };
 
   const activeLocalFilters = Object.entries(localFilters || {}).filter(([_, value]) => value && value.trim());
+  const visibleColumnsCount = Object.values(columnVisibility).filter(v => v).length;
 
   return (
     <div className="w-full bg-white rounded-lg shadow-sm border border-gray-200">
@@ -286,6 +331,67 @@ export const DataTable: React.FC<DataTableProps> = ({
               />
             </div>
             
+            {/* Column Visibility Button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowColumnSelector(!showColumnSelector)}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+              >
+                <Columns className="w-4 h-4 mr-2" />
+                Columns
+                <span className="ml-2 px-2 py-0.5 text-xs bg-gray-200 text-gray-700 rounded-full">
+                  {visibleColumnsCount}/{fields.length}
+                </span>
+              </button>
+
+              {/* Column Selector Dropdown */}
+              {showColumnSelector && (
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                  <div className="p-3 border-b border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-sm">Toggle Columns</h3>
+                      <button
+                        onClick={() => setShowColumnSelector(false)}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => toggleAllColumns(true)}
+                        className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
+                      >
+                        Show All
+                      </button>
+                      <button
+                        onClick={() => toggleAllColumns(false)}
+                        className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
+                      >
+                        Hide All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto p-2">
+                    {fields.map((field) => (
+                      <label
+                        key={field.key}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 rounded cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={columnVisibility[field.key] !== false}
+                          onChange={() => toggleColumnVisibility(field.key)}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">{field.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {(customFilters.length > 0 || fields.some(f => f.filterable)) && (
               <button
                 onClick={() => setShowFilters(!showFilters)}
@@ -335,8 +441,6 @@ export const DataTable: React.FC<DataTableProps> = ({
                         <label className="text-xs text-gray-600 mb-1 block">
                           {filter.label}
                         </label>
-
-                        
                         <select
                           onChange={(e) => filter.onFilterChange(e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -356,7 +460,6 @@ export const DataTable: React.FC<DataTableProps> = ({
               {/* Local Column Filters */}
               {fields.filter(f => f.filterable).length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="text-xs font-medium text-gray-600">Column Filters</h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     {fields
                       .filter((field) => field.filterable)
@@ -397,7 +500,7 @@ export const DataTable: React.FC<DataTableProps> = ({
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  {fields && fields.length > 0 && fields.map((field) => (
+                  {visibleFields && visibleFields.length > 0 && visibleFields.map((field) => (
                     <th
                       key={field?.key || Math.random()}
                       className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
@@ -425,13 +528,13 @@ export const DataTable: React.FC<DataTableProps> = ({
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={(fields?.length || 0) + 1} className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan={(visibleFields?.length || 0) + 1} className="px-6 py-8 text-center text-gray-500">
                       Loading...
                     </td>
                   </tr>
                 ) : !filteredData || filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={(fields?.length || 0) + 1} className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan={(visibleFields?.length || 0) + 1} className="px-6 py-8 text-center text-gray-500">
                       No data found
                     </td>
                   </tr>
@@ -440,7 +543,7 @@ export const DataTable: React.FC<DataTableProps> = ({
                     if (!row) return null;
                     return (
                       <tr key={row.id || idx} className="hover:bg-gray-50">
-                        {fields && fields.length > 0 && fields.map((field) => {
+                        {visibleFields && visibleFields.length > 0 && visibleFields.map((field) => {
                           if (!field || !field.key) return null;
                           const value = row[field.key];
                           return (

@@ -190,9 +190,9 @@ export default function KasirTransactionsPage() {
   };
 
   const fields: Field[] = [
-    { key: "id", label: "ID" },
+    { key: "id", label: "ID",visible: false },
+    { key: "transactionDate", label: "Tanggal", type: "date", sortable: true },
     { key: "type", label: "Jenis", render: renderBadge },
-    { key: "transactionDate", label: "Tanggal", type: "date" },
     { key: "channel", label: "Channel" },
     { key: "amount", label: "Nominal", type: "amount" },
   ];
