@@ -20,6 +20,7 @@ import { Trash2, Plus } from "lucide-react";
 import { formatIDR, parseIDR } from "@/app/utils/idr-format";
 import { toast } from "sonner";
 import { transaksiKasirService } from "./service/service";
+import { getNowDateTimeLocal } from "@/app/utils/date";
 
 type DialogMode = "view" | "add" | null;
 
@@ -29,17 +30,6 @@ interface DetailRow {
   quantity: string;
   amount: string;
 }
-
-/* ===============================
- * HELPER
- * =============================== */
-const getNowDateTimeLocal = () => {
-  const now = new Date();
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(
-    now.getDate()
-  )}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-};
 
 export default function KasirTransactionsPage() {
   const [currentPage, setCurrentPage] = useState(1);
@@ -52,8 +42,10 @@ export default function KasirTransactionsPage() {
     type: "",
     transactionDate: getNowDateTimeLocal(),
     channel: "",
-    file: "",
   });
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
 
   const [detailRows, setDetailRows] = useState<DetailRow[]>([
     { id: crypto.randomUUID(), name: "", quantity: "", amount: "" },
@@ -107,9 +99,10 @@ export default function KasirTransactionsPage() {
       type: "PEMASUKAN",
       transactionDate: getNowDateTimeLocal(),
       channel: "CASH",
-      file: "",
     });
     setDetailRows([{ id: crypto.randomUUID(), name: "", quantity: "", amount: "" }]);
+    setSelectedFile(null);
+    setFilePreview(null);
     setDialogMode("add");
   };
 
@@ -121,6 +114,8 @@ export default function KasirTransactionsPage() {
   const handleCloseDialog = () => {
     setDialogMode(null);
     setSelectedRow(null);
+    setSelectedFile(null);
+    setFilePreview(null);
   };
 
   const handleDetailRowChange = (
@@ -145,6 +140,34 @@ export default function KasirTransactionsPage() {
     setDetailRows((prev) => prev.filter((row) => row.id !== id));
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Optional: size limit (example: 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Ukuran file maksimal 5MB");
+      e.target.value = "";
+      return;
+    }
+
+    // Optional: only allow images
+    if (!file.type.startsWith("image/")) {
+      toast.error("Hanya file gambar yang diperbolehkan (jpg, jpeg, png)");
+      e.target.value = "";
+      return;
+    }
+
+    setSelectedFile(file);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFilePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   /* ===============================
    * SUBMIT
    * =============================== */
@@ -154,19 +177,30 @@ export default function KasirTransactionsPage() {
     try {
       setIsSubmitting(true);
 
-      await transaksiKasirService.create({
-        type: formData.type,
-        channel: formData.channel,
-        transactionDate: new Date(formData.transactionDate).toISOString(),
-        amount: totalAmount,
-        file: formData.file,
-        detail: detailRows.map((d) => ({
-          id: "",
-          name: d.name,
-          quantity: Number(d.quantity),
-          amount: Number(d.amount),
-        })),
-      });
+      const payload = new FormData();
+
+      payload.append("type", formData.type);
+      payload.append("channel", formData.channel);
+      payload.append("transactionDate", new Date(formData.transactionDate).toISOString());
+      payload.append("amount", totalAmount.toString());
+
+      if (selectedFile) {
+        payload.append("file", selectedFile);
+      }
+
+      payload.append(
+        "detail",
+        JSON.stringify(
+          detailRows.map((d) => ({
+            id: "",
+            name: d.name,
+            quantity: Number(d.quantity),
+            amount: Number(d.amount),
+          }))
+        )
+      );
+
+      await transaksiKasirService.create(payload);
 
       toast.success("Transaksi berhasil dibuat");
       handleCloseDialog();
@@ -175,6 +209,19 @@ export default function KasirTransactionsPage() {
       toast.error(err?.response?.data?.message || "Gagal membuat transaksi");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (data: any) => {
+    const { id } = data;
+    if (!id) return false;
+
+    try {
+      await transaksiKasirService.delete(id);
+      toast.success(`Berhasil menghapus transaksi ${id}`);
+      refetch();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Gagal menghapus transaksi");
     }
   };
 
@@ -190,11 +237,12 @@ export default function KasirTransactionsPage() {
   };
 
   const fields: Field[] = [
-    { key: "id", label: "ID",visible: false },
+    { key: "id", label: "ID", visible: false },
     { key: "transactionDate", label: "Tanggal", type: "date", sortable: true },
     { key: "type", label: "Jenis", render: renderBadge },
     { key: "channel", label: "Channel" },
     { key: "amount", label: "Nominal", type: "amount" },
+    { key: "file", label: "Lampiran", type: "text" },
   ];
 
   return (
@@ -203,8 +251,8 @@ export default function KasirTransactionsPage() {
         headerName="Data Transaksi"
         fields={fields}
         data={data || []}
-        acl={{ canView: true, canAdd: true }}
-        actions={{ onAdd: handleAdd, onView: handleView }}
+        acl={{ canView: true, canAdd: true, canDelete: true }}
+        actions={{ onAdd: handleAdd, onView: handleView, onDelete: handleDelete }}
         pagination={{
           currentPage,
           totalPages: 1,
@@ -270,6 +318,36 @@ export default function KasirTransactionsPage() {
             <div>
               <Label>Total Nominal</Label>
               <Input readOnly value={formatIDR(totalAmount)} />
+            </div>
+
+            {/* File Upload Field */}
+            <div className="col-span-2">
+              <Label>Lampiran (jpg, jpeg, png)</Label>
+              <div className="mt-1.5">
+                <Input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png"
+                  onChange={handleFileChange}
+                />
+                {selectedFile && (
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    Terpilih: {selectedFile.name} (
+                    {(selectedFile.size / 1024).toFixed(1)} KB)
+                  </div>
+                )}
+              </div>
+
+              {filePreview && (
+                <div className="mt-4">
+                  <div className="relative w-40 h-40 border rounded-md overflow-hidden bg-muted/40">
+                    <img
+                      src={filePreview}
+                      alt="Preview lampiran"
+                      className="object-contain w-full h-full"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

@@ -1,14 +1,34 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Edit, Trash2, Eye, ChevronLeft, ChevronRight, Filter, X, Download, Columns } from 'lucide-react';
+import {
+  Search, Plus, Edit, Trash2, Eye, ChevronLeft, ChevronRight,
+  Filter, X, Download, Columns
+} from 'lucide-react';
+import { formatDateTime } from '@/app/utils/date';
+import { formatIDR } from '@/app/utils/idr-format';
 
-// Type definitions
+// shadcn/ui components
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+
+// ────────────────────────────────────────────────
+// Type definitions (unchanged)
 export interface Field {
   key: string;
   label: string;
   type?: 'text' | 'date' | 'number' | 'amount';
   filterable?: boolean;
   sortable?: boolean;
-  visible?: boolean; // New property to control visibility
+  visible?: boolean;
   render?: (value: any, row: any) => React.ReactNode;
 }
 
@@ -52,48 +72,11 @@ export interface DataTableProps {
   pagination?: PaginationData;
   onPageChange?: (page: number) => void;
   onPageSizeChange?: (size: number) => void;
-  onFieldsChange?: (fields: Field[]) => void; // New callback for field changes
+  onFieldsChange?: (fields: Field[]) => void;
   loading?: boolean;
 }
 
-// Helper function to format dates
-const formatDate = (value: any): string => {
-  if (!value) return '-';
-  
-  try {
-    const date = new Date(value);
-    if (isNaN(date.getTime())) return value.toString();
-    
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  } catch (e) {
-    return value.toString();
-  }
-};
-
-// Helper function to format amount to IDR currency
-const formatAmount = (value: any): string => {
-  if (value === null || value === undefined || value === '') return '-';
-  
-  try {
-    const numValue = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]/g, '')) : value;
-    
-    if (isNaN(numValue)) return value.toString();
-    
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(numValue);
-  } catch (e) {
-    return value.toString();
-  }
-};
-
+// ────────────────────────────────────────────────
 export const DataTable: React.FC<DataTableProps> = ({
   fields,
   data,
@@ -119,7 +102,10 @@ export const DataTable: React.FC<DataTableProps> = ({
   const [showFilters, setShowFilters] = useState(false);
   const [showColumnSelector, setShowColumnSelector] = useState(false);
 
-  // Initialize column visibility state from fields
+  // State for delete confirmation
+  const [rowToDelete, setRowToDelete] = useState<any | null>(null);
+
+  // Initialize column visibility
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     fields.forEach(field => {
@@ -128,17 +114,13 @@ export const DataTable: React.FC<DataTableProps> = ({
     return initial;
   });
 
-  // Get visible fields based on visibility state
   const visibleFields = useMemo(() => {
     return fields.filter(field => columnVisibility[field.key] !== false);
   }, [fields, columnVisibility]);
 
-  // Toggle column visibility
   const toggleColumnVisibility = (key: string) => {
     setColumnVisibility(prev => {
       const newVisibility = { ...prev, [key]: !prev[key] };
-      
-      // Update fields array and call callback
       if (onFieldsChange) {
         const updatedFields = fields.map(field => ({
           ...field,
@@ -146,19 +128,17 @@ export const DataTable: React.FC<DataTableProps> = ({
         }));
         onFieldsChange(updatedFields);
       }
-      
       return newVisibility;
     });
   };
 
-  // Show/hide all columns
   const toggleAllColumns = (visible: boolean) => {
     const newVisibility: Record<string, boolean> = {};
     fields.forEach(field => {
       newVisibility[field.key] = visible;
     });
     setColumnVisibility(newVisibility);
-    
+
     if (onFieldsChange) {
       const updatedFields = fields.map(field => ({
         ...field,
@@ -168,94 +148,75 @@ export const DataTable: React.FC<DataTableProps> = ({
     }
   };
 
-  // Local search filtering
+  // ─── Filtering, Searching, Sorting (unchanged) ───
   const filteredData = useMemo(() => {
     if (!data || !Array.isArray(data)) return [];
-    
+
     let filtered = [...data];
 
-    // Apply search
-    if (searchTerm && searchTerm.trim()) {
-      filtered = filtered.filter((row) => {
-        if (!row) return false;
-        return fields.some((field) => {
-          if (!field || !field.key) return false;
-          const value = row[field.key];
-          if (value === null || value === undefined) return false;
+    // Search
+    if (searchTerm?.trim()) {
+      filtered = filtered.filter(row =>
+        fields.some(field => {
+          const value = row?.[field.key];
+          if (value == null) return false;
           try {
-            if (field.type === 'date') {
-              const formattedDate = formatDate(value);
-              return formattedDate.toLowerCase().includes(searchTerm.toLowerCase());
-            }
-            if (field.type === 'amount') {
-              const formattedAmount = formatAmount(value);
-              return formattedAmount.toLowerCase().includes(searchTerm.toLowerCase());
-            }
-            return value.toString().toLowerCase().includes(searchTerm.toLowerCase());
-          } catch (e) {
+            if (field.type === 'date') return formatDateTime(value).toLowerCase().includes(searchTerm.toLowerCase());
+            if (field.type === 'amount') return formatIDR(value).toLowerCase().includes(searchTerm.toLowerCase());
+            return String(value).toLowerCase().includes(searchTerm.toLowerCase());
+          } catch {
             return false;
           }
-        });
-      });
+        })
+      );
     }
 
-    // Apply local filters
-    Object.entries(localFilters).forEach(([key, filterValue]) => {
-      if (filterValue && filterValue.trim()) {
-        filtered = filtered.filter((row) => {
-          if (!row) return false;
-          const value = row[key];
-          if (value === null || value === undefined) return false;
-          try {
-            const field = fields.find(f => f.key === key);
-            if (field?.type === 'date') {
-              const formattedDate = formatDate(value);
-              return formattedDate.toLowerCase().includes(filterValue.toLowerCase());
-            }
-            if (field?.type === 'amount') {
-              const formattedAmount = formatAmount(value);
-              return formattedAmount.toLowerCase().includes(filterValue.toLowerCase());
-            }
-            return value.toString().toLowerCase().includes(filterValue.toLowerCase());
-          } catch (e) {
-            return false;
-          }
-        });
-      }
+    // Local column filters
+    Object.entries(localFilters).forEach(([key, val]) => {
+      if (!val?.trim()) return;
+      filtered = filtered.filter(row => {
+        const value = row?.[key];
+        if (value == null) return false;
+        try {
+          const field = fields.find(f => f.key === key);
+          if (field?.type === 'date') return formatDateTime(value).toLowerCase().includes(val.toLowerCase());
+          if (field?.type === 'amount') return formatIDR(value).toLowerCase().includes(val.toLowerCase());
+          return String(value).toLowerCase().includes(val.toLowerCase());
+        } catch {
+          return false;
+        }
+      });
     });
 
-    // Apply sorting
-    if (sortConfig && sortConfig.key) {
+    // Sorting
+    if (sortConfig?.key) {
       filtered.sort((a, b) => {
-        if (!a || !b) return 0;
-        const aVal = a[sortConfig.key];
-        const bVal = b[sortConfig.key];
-        
-        if (aVal === null || aVal === undefined) return 1;
-        if (bVal === null || bVal === undefined) return -1;
-        
+        const aVal = a?.[sortConfig.key];
+        const bVal = b?.[sortConfig.key];
+
+        if (aVal == null) return 1;
+        if (bVal == null) return -1;
+
         try {
           const field = fields.find(f => f.key === sortConfig.key);
           if (field?.type === 'date') {
-            const dateA = new Date(aVal).getTime();
-            const dateB = new Date(bVal).getTime();
-            if (isNaN(dateA)) return 1;
-            if (isNaN(dateB)) return -1;
-            return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+            const da = new Date(aVal).getTime();
+            const db = new Date(bVal).getTime();
+            if (isNaN(da)) return 1;
+            if (isNaN(db)) return -1;
+            return sortConfig.direction === 'asc' ? da - db : db - da;
           }
-          
           if (field?.type === 'amount') {
-            const numA = typeof aVal === 'string' ? parseFloat(aVal.replace(/[^0-9.-]/g, '')) : aVal;
-            const numB = typeof bVal === 'string' ? parseFloat(bVal.replace(/[^0-9.-]/g, '')) : bVal;
-            if (isNaN(numA)) return 1;
-            if (isNaN(numB)) return -1;
-            return sortConfig.direction === 'asc' ? numA - numB : numB - numA;
+            const na = typeof aVal === 'string' ? parseFloat(aVal.replace(/[^0-9.-]/g, '')) : aVal;
+            const nb = typeof bVal === 'string' ? parseFloat(bVal.replace(/[^0-9.-]/g, '')) : bVal;
+            if (isNaN(na)) return 1;
+            if (isNaN(nb)) return -1;
+            return sortConfig.direction === 'asc' ? na - nb : nb - na;
           }
-          
           if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
           if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
           return 0;
-        } catch (e) {
+        } catch {
           return 0;
         }
       });
@@ -266,36 +227,39 @@ export const DataTable: React.FC<DataTableProps> = ({
 
   const handleSort = (key: string) => {
     if (!key) return;
-    setSortConfig((current) => {
-      if (!current || current.key !== key) {
-        return { key, direction: 'asc' };
-      }
-      if (current.direction === 'asc') {
-        return { key, direction: 'desc' };
-      }
+    setSortConfig(prev => {
+      if (!prev || prev.key !== key) return { key, direction: 'asc' };
+      if (prev.direction === 'asc') return { key, direction: 'desc' };
       return null;
     });
   };
 
   const handleLocalFilter = (key: string, value: string) => {
-    if (!key) return;
-    setLocalFilters((prev) => ({
-      ...prev,
-      [key]: value || '',
-    }));
+    setLocalFilters(prev => ({ ...prev, [key]: value || '' }));
   };
 
   const clearLocalFilter = (key: string) => {
-    if (!key) return;
-    setLocalFilters((prev) => {
-      const newFilters = { ...prev };
-      delete newFilters[key];
-      return newFilters;
+    setLocalFilters(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
     });
   };
 
-  const activeLocalFilters = Object.entries(localFilters || {}).filter(([_, value]) => value && value.trim());
-  const visibleColumnsCount = Object.values(columnVisibility).filter(v => v).length;
+  const activeLocalFilters = Object.entries(localFilters).filter(([, v]) => v?.trim());
+  const visibleColumnsCount = Object.values(columnVisibility).filter(Boolean).length;
+
+  // ─── Delete confirmation logic ───
+  const confirmDelete = (row: any) => {
+    setRowToDelete(row);
+  };
+
+  const handleConfirmedDelete = () => {
+    if (rowToDelete && actions.onDelete) {
+      actions.onDelete(rowToDelete);
+    }
+    setRowToDelete(null);
+  };
 
   return (
     <div className="w-full bg-white rounded-lg shadow-sm border border-gray-200">
@@ -304,87 +268,75 @@ export const DataTable: React.FC<DataTableProps> = ({
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900">{headerName}</h2>
           {acl.canAdd && (
-            <button
-              onClick={actions.onAdd}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
-            >
+            <Button onClick={actions.onAdd} variant="default" size="sm">
               <Plus className="w-4 h-4 mr-2" />
-              Add New
-            </button>
+              Tambah Baru
+            </Button>
           )}
         </div>
       </div>
 
-      {/* Content */}
+      {/* Main Content */}
       <div className="p-6">
-        {/* Search and Filters Bar */}
+        {/* Search + Controls */}
         <div className="space-y-4 mb-6">
-          <div className="flex gap-4 items-center flex-wrap">
-            <div className="flex-1 min-w-[200px] relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="flex-1 min-w-[240px] relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search..."
+                placeholder="Cari..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
-            
-            {/* Column Visibility Button */}
+
+            {/* Columns selector */}
             <div className="relative">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setShowColumnSelector(!showColumnSelector)}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
               >
                 <Columns className="w-4 h-4 mr-2" />
-                Columns
-                <span className="ml-2 px-2 py-0.5 text-xs bg-gray-200 text-gray-700 rounded-full">
+                Kolom
+                <span className="ml-2 px-2 py-0.5 text-xs bg-muted rounded-full">
                   {visibleColumnsCount}/{fields.length}
                 </span>
-              </button>
+              </Button>
 
-              {/* Column Selector Dropdown */}
               {showColumnSelector && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
-                  <div className="p-3 border-b border-gray-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-sm">Toggle Columns</h3>
-                      <button
-                        onClick={() => setShowColumnSelector(false)}
-                        className="text-gray-400 hover:text-gray-600"
-                      >
+                <div className="absolute right-0 mt-2 w-64 bg-popover border shadow-md rounded-lg z-50">
+                  <div className="p-3 border-b">
+                    <div className="flex justify-between items-center mb-2">
+                      <h3 className="text-sm font-medium">Tampilkan Kolom</h3>
+                      <button onClick={() => setShowColumnSelector(false)}>
                         <X className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => toggleAllColumns(true)}
-                        className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
-                      >
-                        Show All
-                      </button>
-                      <button
-                        onClick={() => toggleAllColumns(false)}
-                        className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
-                      >
-                        Hide All
-                      </button>
+                    <div className="flex gap-2 text-xs">
+                      <Button variant="outline" size="sm" onClick={() => toggleAllColumns(true)}>
+                        Tampilkan Semua
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => toggleAllColumns(false)}>
+                        Sembunyikan Semua
+                      </Button>
                     </div>
                   </div>
-                  <div className="max-h-96 overflow-y-auto p-2">
-                    {fields.map((field) => (
+                  <div className="max-h-80 overflow-y-auto p-1.5">
+                    {fields.map(field => (
                       <label
                         key={field.key}
-                        className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 rounded cursor-pointer"
+                        className="flex items-center gap-2 px-3 py-1.5 hover:bg-accent rounded cursor-pointer text-sm"
                       >
                         <input
                           type="checkbox"
                           checked={columnVisibility[field.key] !== false}
                           onChange={() => toggleColumnVisibility(field.key)}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                         />
-                        <span className="text-sm text-gray-700">{field.label}</span>
+                        {field.label}
                       </label>
                     ))}
                   </div>
@@ -393,28 +345,26 @@ export const DataTable: React.FC<DataTableProps> = ({
             </div>
 
             {(customFilters.length > 0 || fields.some(f => f.filterable)) && (
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setShowFilters(!showFilters)}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
               >
                 <Filter className="w-4 h-4 mr-2" />
-                Filters
+                Filter
                 {activeLocalFilters.length > 0 && (
-                  <span className="ml-2 px-2 py-0.5 text-xs bg-gray-200 text-gray-700 rounded-full">
+                  <span className="ml-2 px-1.5 py-0.5 text-xs bg-muted rounded-full">
                     {activeLocalFilters.length}
                   </span>
                 )}
-              </button>
+              </Button>
             )}
 
             {acl.canDownload && (
-              <button
-                onClick={actions.onDownload}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-              >
+              <Button variant="outline" size="sm" onClick={actions.onDownload}>
                 <Download className="w-4 h-4 mr-2" />
-                Download
-              </button>
+                Unduh
+              </Button>
             )}
           </div>
 
@@ -495,113 +445,111 @@ export const DataTable: React.FC<DataTableProps> = ({
         </div>
 
         {/* Table */}
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <div className="border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted/50">
                 <tr>
-                  {visibleFields && visibleFields.length > 0 && visibleFields.map((field) => (
+                  {visibleFields.map(field => (
                     <th
-                      key={field?.key || Math.random()}
-                      className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
-                        field?.sortable ? 'cursor-pointer hover:bg-gray-100' : ''
-                      }`}
-                      onClick={() => field?.sortable && field?.key && handleSort(field.key)}
+                      key={field.key}
+                      className={`px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider ${field.sortable ? 'cursor-pointer hover:bg-muted' : ''
+                        }`}
+                      onClick={() => field.sortable && field.key && handleSort(field.key)}
                     >
-                      <div className="flex items-center gap-2">
-                        {field?.label || ''}
-                        {field?.sortable && sortConfig?.key === field?.key && (
-                          <span className="text-xs">
-                            {sortConfig.direction === 'asc' ? '↑' : '↓'}
-                          </span>
+                      <div className="flex items-center gap-1.5">
+                        {field.label}
+                        {sortConfig?.key === field.key && (
+                          <span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
                         )}
                       </div>
                     </th>
                   ))}
-                  {(acl?.canView || acl?.canUpdate || acl?.canDelete) && (
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
+                  {(acl.canView || acl.canUpdate || acl.canDelete) && (
+                    <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Aksi
                     </th>
                   )}
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-border bg-background">
                 {loading ? (
                   <tr>
-                    <td colSpan={(visibleFields?.length || 0) + 1} className="px-6 py-8 text-center text-gray-500">
-                      Loading...
+                    <td colSpan={visibleFields.length + 1} className="px-6 py-10 text-center text-muted-foreground">
+                      Memuat data...
                     </td>
                   </tr>
-                ) : !filteredData || filteredData.length === 0 ? (
+                ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={(visibleFields?.length || 0) + 1} className="px-6 py-8 text-center text-gray-500">
-                      No data found
+                    <td colSpan={visibleFields.length + 1} className="px-6 py-10 text-center text-muted-foreground">
+                      Tidak ada data
                     </td>
                   </tr>
                 ) : (
-                  filteredData.map((row, idx) => {
-                    if (!row) return null;
-                    return (
-                      <tr key={row.id || idx} className="hover:bg-gray-50">
-                        {visibleFields && visibleFields.length > 0 && visibleFields.map((field) => {
-                          if (!field || !field.key) return null;
-                          const value = row[field.key];
-                          return (
-                            <td key={field.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {field.render ? (
-                                (() => {
-                                  try {
-                                    return field.render(value, row);
-                                  } catch (e) {
-                                    return value ?? '-';
-                                  }
-                                })()
-                              ) : field.type === 'date' ? (
-                                formatDate(value)
-                              ) : field.type === 'amount' ? (
-                                formatAmount(value)
-                              ) : (
-                                value ?? '-'
-                              )}
-                            </td>
-                          );
-                        })}
-                        {(acl?.canView || acl?.canUpdate || acl?.canDelete) && (
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <div className="flex gap-2 justify-end">
-                              {acl?.canView && actions?.onView && (
-                                <button
-                                  onClick={() => actions.onView?.(row)}
-                                  className="text-blue-600 hover:text-blue-900 p-1"
-                                  title="View"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </button>
-                              )}
-                              {acl?.canUpdate && actions?.onUpdate && (
-                                <button
-                                  onClick={() => actions.onUpdate?.(row)}
-                                  className="text-green-600 hover:text-green-900 p-1"
-                                  title="Edit"
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </button>
-                              )}
-                              {acl?.canDelete && actions?.onDelete && (
-                                <button
-                                  onClick={() => actions.onDelete?.(row)}
-                                  className="text-red-600 hover:text-red-900 p-1"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })
+                  filteredData.map((row, idx) => (
+                    <tr key={row.id ?? idx} className="hover:bg-muted/30">
+                      {visibleFields.map(field => (
+                        <td key={field.key} className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
+                          {field.render
+                            ? field.render(row[field.key], row)
+                            : field.type === 'date'
+                              ? formatDateTime(row[field.key])
+                              : field.type === 'amount'
+                                ? formatIDR(row[field.key])
+                                : (row[field.key] ?? '-')}
+                        </td>
+                      ))}
+
+                      {(acl.canView || acl.canUpdate || acl.canDelete) && (
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                          <div className="flex gap-1.5 justify-end">
+                            {acl.canView && actions.onView && (
+                              <Button variant="ghost" size="icon" onClick={() => actions.onView?.(row)}>
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {acl.canUpdate && actions.onUpdate && (
+                              <Button variant="ghost" size="icon" onClick={() => actions.onUpdate?.(row)}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {acl.canDelete && actions.onDelete && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-destructive hover:text-destructive/90 hover:bg-destructive/10"
+                                    onClick={() => confirmDelete(row)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Apakah kamu yakin ingin menghapus data ini?
+                                      Aksi ini tidak dapat dibatalkan.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={handleConfirmedDelete}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Hapus
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -630,7 +578,6 @@ export const DataTable: React.FC<DataTableProps> = ({
                 {pagination.totalItems}
               </span>
             </div>
-
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onPageChange?.(pagination.currentPage - 1)}

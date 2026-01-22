@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import AppListView from "@/components/app-list-view";
 
 import { useTransaksi } from "./hooks/useTransaksi";
@@ -43,25 +42,25 @@ export default function AdminTransactionsPage() {
   };
 
   const fields: Field[] = [
-    { key: "id", label: "ID", sortable: true },
-    {
-      key: "type",
-      label: "Jenis Transaksi",
-      filterable: true,
-      render: (value) => renderBadge(value),
-    },
+    { key: "id", label: "ID", sortable: true, visible: false },
     {
       key: "transactionDate",
       label: "Tanggal Transaksi",
-      filterable: true,
+      filterable: false,
       type: "date",
+    },
+    {
+      key: "type",
+      label: "Jenis Transaksi",
+      filterable: false,
+      render: (value) => renderBadge(value),
     },
     {
       key: "channel",
       label: "Channel",
-      filterable: true,
+      filterable: false,
       render: (value) => renderBadge(value),
-    },
+    },  
     { key: "amount", label: "Nominal", sortable: true, type: "amount" },
     { key: "file", label: "Lampiran" },
   ];
@@ -70,19 +69,18 @@ export default function AdminTransactionsPage() {
     {
       key: "name",
       label: "Nama",
-      filterable: true,
-      render: (value) => renderBadge(value),
+      filterable: false,
     },
     {
       key: "amount",
       label: "Nominal",
       type: 'amount',
-      filterable: true,
+      filterable: false,
     },
     {
       key: "quantity",
       label: "Jumlah",
-      filterable: true,
+      filterable: false,
     },
 
   ];
@@ -122,6 +120,7 @@ export default function AdminTransactionsPage() {
           canUpdate: false,
           canDelete: false,
           canDownload: true,
+
         }}
         actions={{
           onView: handleView,

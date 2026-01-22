@@ -1,5 +1,7 @@
 "use client"
 
+import { formatDateTime } from "@/app/utils/date"
+import { formatIDR } from "@/app/utils/idr-format"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 
@@ -42,7 +44,7 @@ export default function AppListView({
                 {formatKey(key)}
               </span>
               <span className="text-sm text-right">
-                {renderValue(value)}
+                {renderValue(key, value)}
               </span>
             </div>
             {index < entries.length - 1 && <Separator />}
@@ -59,10 +61,24 @@ function formatKey(key: string) {
   return key.replace(/_/g, " ")
 }
 
-function renderValue(value: any) {
+function renderValue(key: string, value: any) {
   if (value === null || value === undefined) return "-"
+  
+  const lowerKey = key.toLowerCase()
+  
+  // Check if key includes 'date'
+  if (lowerKey.includes("date")) {
+    return formatDateTime(value)
+  }
+  
+  // Check if key includes 'amount'
+  if (lowerKey.includes("amount")) {
+    return formatIDR(value)
+  }
+  
   if (typeof value === "boolean") return value ? "Yes" : "No"
   if (Array.isArray(value)) return value.length ? value.join(", ") : "-"
   if (typeof value === "object") return JSON.stringify(value)
   return value.toString()
 }
+
