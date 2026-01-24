@@ -268,7 +268,7 @@ export const DataTable: React.FC<DataTableProps> = ({
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900">{headerName}</h2>
           {acl.canAdd && (
-            <Button onClick={actions.onAdd} variant="default" size="sm">
+            <Button onClick={actions.onAdd} variant="default" className='bg-blue-600 hover:bg-blue-700 text-white' size="sm">
               <Plus className="w-4 h-4 mr-2" />
               Tambah Baru
             </Button>

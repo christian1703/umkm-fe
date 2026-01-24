@@ -8,8 +8,8 @@ export default function AdminKasirPage() {
   const [pageSize, setPageSize] = useState(10);
 
   const sampleData = [
-    { id: 1, name: 'asep', username : 'asep123', password: 'asep321', nomor_wa:'0812-3921-8174'},
-    { id: 2, name: 'yyyy', username : 'yyy543', password: '(password telah diganti)', nomor_wa:'0812-1234-5678'},
+    { id: 1, name: 'asep', username: 'asep123', nomor_wa: '0812-3921-8174' },
+    { id: 2, name: 'yyyy', username: 'yyy543', nomor_wa: '0812-1234-5678' },
 
   ];
 
@@ -17,10 +17,7 @@ export default function AdminKasirPage() {
     { key: 'id', label: 'ID', sortable: true },
     { key: 'name', label: 'Name', sortable: true, filterable: true },
     { key: 'username', label: 'Username', filterable: true },
-    { key: 'password', label: 'password', filterable: true },
     { key: 'nomor_wa', label: 'Nomor WhatsApp', filterable: true },
-    
-   
   ];
 
   const customFilters: CustomFilter[] = [
@@ -38,43 +35,43 @@ export default function AdminKasirPage() {
       },
     },
   ];
-  
-  
+
+
   return <>
-   <DataTable
-        headerName="Managemen Kasir"
-        fields={fields}
-        data={sampleData}
-        acl={{
-          canView: false,
-          canAdd: true,
-          canUpdate: false,
-          canDelete: true,
-        }}
-        actions={{
-          onView: (row) => alert(`View: ${JSON.stringify(row)}`),
-          onAdd: () => alert('Add new item'),
-          onUpdate: (row) => alert(`Update: ${JSON.stringify(row)}`),
-          onDelete: (row) => alert(`Delete: ${JSON.stringify(row)}`),
-        }}
-        customFilters={customFilters}
-        pagination={{
-          currentPage,
-          totalPages: 3,
-          pageSize,
-          totalItems: 25,
-        }}
-        onPageChange={(page) => {
-          setCurrentPage(page);
-          console.log('Page changed to:', page);
-          // Make API call here
-        }}
-        onPageSizeChange={(size) => {
-          setPageSize(size);
-          setCurrentPage(1);
-          console.log('Page size changed to:', size);
-          // Make API call here
-        }}
-      />
+    <DataTable
+      headerName="Managemen Kasir"
+      fields={fields}
+      data={sampleData}
+      acl={{
+        canView: false,
+        canAdd: true,
+        canUpdate: false,
+        canDelete: true,
+      }}
+      actions={{
+        onView: (row) => alert(`View: ${JSON.stringify(row)}`),
+        onAdd: () => alert('Add new item'),
+        onUpdate: (row) => alert(`Update: ${JSON.stringify(row)}`),
+        onDelete: (row) => alert(`Delete: ${JSON.stringify(row)}`),
+      }}
+      customFilters={customFilters}
+      pagination={{
+        currentPage,
+        totalPages: 3,
+        pageSize,
+        totalItems: 25,
+      }}
+      onPageChange={(page) => {
+        setCurrentPage(page);
+        console.log('Page changed to:', page);
+        // Make API call here
+      }}
+      onPageSizeChange={(size) => {
+        setPageSize(size);
+        setCurrentPage(1);
+        console.log('Page size changed to:', size);
+        // Make API call here
+      }}
+    />
   </>
 }
