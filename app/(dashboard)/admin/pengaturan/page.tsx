@@ -1,100 +1,171 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Eye, EyeOff, Save, User, Phone, Lock, Shield } from 'lucide-react';
+import { Eye, EyeOff, Save, User, Phone, Lock, Shield, Loader2 } from 'lucide-react';
+import { useAuth } from '@/app/contexts/auth-context';
+import { UpdateUserPayload, UserService } from '../manajemen-kasir/service/service';
 
 export default function AdminPengaturanPage() {
+  const { user, refreshUser } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-  
-  // Data yang bisa diedit
+  const [errorMessage, setErrorMessage] = useState(''); 
+
+  // Form data state
   const [formData, setFormData] = useState({
-    username: 'admin001',
-    namaAdmin: 'John Doe',
-    nomorWA: '081234567890',
+    username: '',
+    namaAdmin: '',
+    nomorWA: '',
     password: '',
     confirmPassword: ''
   });
 
-  const handleInputChange = (e) => {
+  // Load initial data from auth context
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        username: user.username || '',
+        namaAdmin: user.name || '',
+        nomorWA: user.whatsapp || '',
+        password: '',
+        confirmPassword: ''
+      });
+    }
+  }, [user]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
     setSuccessMessage('');
+    setErrorMessage('');
   };
 
-  const handleSubmit = () => {
-    // Validasi username
-    if (!formData.username || formData.username.trim().length < 4) {
-      alert('Username minimal 4 karakter!');
-      return;
-    }
-    
-    // Validasi password jika diisi
-    if (formData.password && formData.password !== formData.confirmPassword) {
-      alert('Password dan konfirmasi password tidak cocok!');
-      return;
-    }
-    
-    // Validasi nomor WA
-    if (!formData.nomorWA || formData.nomorWA.length < 10) {
-      alert('Nomor WhatsApp tidak valid!');
-      return;
-    }
-    
+  const validateForm = (): string | null => {
     // Validasi nama admin
     if (!formData.namaAdmin || formData.namaAdmin.trim().length < 3) {
-      alert('Nama admin minimal 3 karakter!');
+      return 'Nama admin minimal 3 karakter!';
+    }
+
+    // Validasi nomor WA
+    if (!formData.nomorWA || formData.nomorWA.length < 10) {
+      return 'Nomor WhatsApp tidak valid! Minimal 10 digit.';
+    }
+
+    // Validasi nomor WA hanya angka
+    if (!/^\d+$/.test(formData.nomorWA)) {
+      return 'Nomor WhatsApp hanya boleh berisi angka!';
+    }
+
+    // Validasi password jika diisi
+    if (formData.password) {
+      if (formData.password.length < 8) {
+        return 'Password minimal 8 karakter!';
+      }
+      if (formData.password !== formData.confirmPassword) {
+        return 'Password dan konfirmasi password tidak cocok!';
+      }
+    }
+
+    return null;
+  };
+
+  const handleSubmit = async () => {
+    // Validasi form
+    const validationError = validateForm();
+    if (validationError) {
+      setErrorMessage(validationError);
       return;
     }
-    
-    // Simpan data (dalam implementasi nyata, kirim ke backend)
-    console.log('Data yang disimpan:', {
-      username: formData.username,
-      namaAdmin: formData.namaAdmin,
-      nomorWA: formData.nomorWA,
-      ...(formData.password && { password: formData.password })
-    });
-    
-    setSuccessMessage('Pengaturan berhasil disimpan!');
-    setIsEditing(false);
-    
-    // Reset password fields
-    setFormData(prev => ({
-      ...prev,
-      password: '',
-      confirmPassword: ''
-    }));
-    
-    // Hapus pesan sukses setelah 3 detik
-    setTimeout(() => setSuccessMessage(''), 3000);
+
+    if (!user?.id) {
+      setErrorMessage('User ID tidak ditemukan!');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage('');
+
+    try {
+      // Prepare payload
+      const payload: UpdateUserPayload = {
+        id: user.id,
+        name: formData.namaAdmin.trim(),
+        whatsapp: formData.nomorWA,
+        password: formData.password || '' // Send empty string if no password change
+      };
+
+      // Call API
+      await UserService.update(payload);
+
+      // Refresh user data in auth context
+      await refreshUser();
+
+      setSuccessMessage('Pengaturan berhasil disimpan!');
+      setIsEditing(false);
+
+      // Reset password fields
+      setFormData(prev => ({
+        ...prev,
+        password: '',
+        confirmPassword: ''
+      }));
+
+      // Auto-hide success message after 3 seconds
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error: any) {
+      console.error('Error updating admin settings:', error);
+      const message = error.response?.data?.message ||
+        error.message ||
+        'Gagal menyimpan pengaturan. Silakan coba lagi.';
+      setErrorMessage(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCancel = () => {
     setIsEditing(false);
-    setFormData({
-      username: 'admin001',
-      namaAdmin: 'John Doe',
-      nomorWA: '081234567890',
-      password: '',
-      confirmPassword: ''
-    });
+    setErrorMessage('');
     setSuccessMessage('');
+
+    // Reset to original values from user context
+    if (user) {
+      setFormData({
+        username: user.username || '',
+        namaAdmin: user.name || '',
+        nomorWA: user.whatsapp || '',
+        password: '',
+        confirmPassword: ''
+      });
+    }
   };
+
+  // Show loading state while user data is being fetched
+  if (!user) {
+    return (
+      <div className="container mx-auto p-6 max-w-2xl">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-6 max-w-2xl">
       <h1 className="text-3xl font-bold mb-6">Pengaturan Admin</h1>
-      
+
       {successMessage && (
         <Alert className="mb-6 bg-green-50 border-green-200">
           <AlertDescription className="text-green-800">
@@ -102,7 +173,15 @@ export default function AdminPengaturanPage() {
           </AlertDescription>
         </Alert>
       )}
-      
+
+      {errorMessage && (
+        <Alert className="mb-6 bg-red-50 border-red-200">
+          <AlertDescription className="text-red-800">
+            {errorMessage}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Informasi Profil Administrator</CardTitle>
@@ -112,7 +191,7 @@ export default function AdminPengaturanPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            {/* Username - Editable untuk Admin */}
+            {/* Username - Read Only */}
             <div className="space-y-2">
               <Label htmlFor="username" className="flex items-center gap-2">
                 <User className="w-4 h-4" />
@@ -122,15 +201,12 @@ export default function AdminPengaturanPage() {
                 id="username"
                 name="username"
                 value={formData.username}
-                onChange={handleInputChange}
-                disabled={!isEditing}
-                placeholder="Masukkan username"
+                disabled
+                className="bg-gray-50"
               />
-              {isEditing && (
-                <p className="text-xs text-gray-500">
-                  Username minimal 4 karakter
-                </p>
-              )}
+              <p className="text-xs text-gray-500">
+                Username tidak dapat diubah
+              </p>
             </div>
 
             {/* Nama Admin */}
@@ -147,6 +223,11 @@ export default function AdminPengaturanPage() {
                 disabled={!isEditing}
                 placeholder="Masukkan nama admin"
               />
+              {isEditing && (
+                <p className="text-xs text-gray-500">
+                  Nama admin minimal 3 karakter
+                </p>
+              )}
             </div>
 
             {/* Nomor WhatsApp */}
@@ -164,7 +245,21 @@ export default function AdminPengaturanPage() {
                 placeholder="081234567890"
                 type="tel"
               />
+              {isEditing && (
+                <p className="text-xs text-gray-500">
+                  Format: 08xxxxxxxxxx (minimal 10 digit)
+                </p>
+              )}
             </div>
+
+            {/* Divider */}
+            {isEditing && (
+              <div className="border-t pt-6">
+                <h3 className="text-sm font-semibold mb-4 text-gray-700">
+                  Ubah Password (Opsional)
+                </h3>
+              </div>
+            )}
 
             {/* Password */}
             <div className="space-y-2">
@@ -182,14 +277,15 @@ export default function AdminPengaturanPage() {
                   disabled={!isEditing}
                   placeholder="Kosongkan jika tidak ingin mengubah"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 disabled:opacity-50"
-                  disabled={!isEditing}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+                {isEditing && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                )}
               </div>
               {isEditing && (
                 <p className="text-xs text-gray-500">
@@ -214,14 +310,15 @@ export default function AdminPengaturanPage() {
                   disabled={!isEditing}
                   placeholder="Ulangi password baru"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 disabled:opacity-50"
-                  disabled={!isEditing}
-                >
-                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+                {isEditing && (
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -239,14 +336,25 @@ export default function AdminPengaturanPage() {
                 <>
                   <Button
                     onClick={handleSubmit}
-                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    disabled={isSubmitting}
+                    className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50"
                   >
-                    <Save className="w-4 h-4 mr-2" />
-                    Simpan
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Menyimpan...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Simpan
+                      </>
+                    )}
                   </Button>
                   <Button
                     variant="outline"
                     onClick={handleCancel}
+                    disabled={isSubmitting}
                     className="flex-1"
                   >
                     Batal

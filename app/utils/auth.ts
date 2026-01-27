@@ -6,6 +6,7 @@ export type User = {
   id: string;
   username: string;
   name: string;
+  whatsapp: string; // Added whatsapp field
   role: "ADMIN" | "KASIR";
   passwordChanged: boolean;
 };
@@ -23,6 +24,7 @@ export class AuthService {
         id: response.user.id,
         username: response.user.username,
         name: response.user.name,
+        whatsapp: response.user.whatsapp || '', // Add whatsapp from response
         role: response.user.role,
         passwordChanged: response.user.passwordChanged,
       };
@@ -67,35 +69,41 @@ export class AuthService {
    * Returns the current user, preferring cached value for speed,
    * but verifies with /me in background if possible.
    */
-  static async getCurrentUser(): Promise<User | null> {
+  static async getCurrentUser(
+    options?: { force?: boolean }
+  ): Promise<User | null> {
     if (typeof window === "undefined") return null;
 
-    // 1. Try to get from sessionStorage first (fast & optimistic)
-    const cached = sessionStorage.getItem(this.USER_KEY);
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached) as User;
-        // Quick shape validation
-        if (parsed.id && parsed.role && ["ADMIN", "KASIR"].includes(parsed.role)) {
-          // Verify in background (fire-and-forget)
-          this._verifyAndUpdateInBackground();
-          return parsed;
+    const force = options?.force === true;
+
+    // 1️⃣ USE CACHE ONLY IF NOT FORCED
+    if (!force) {
+      const cached = sessionStorage.getItem(this.USER_KEY);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached) as User;
+          if (parsed.id && parsed.role && ["ADMIN", "KASIR"].includes(parsed.role)) {
+            // background sync
+            this._verifyAndUpdateInBackground();
+            return parsed;
+          }
+        } catch {
+          sessionStorage.removeItem(this.USER_KEY);
         }
-      } catch (e) {
-        console.warn("Invalid cached user data", e);
       }
     }
 
-    // 2. No valid cache → fetch from /me
+    // 2️⃣ FORCE OR NO CACHE → FETCH FROM API
     try {
-      const res = await api.get("/auth/me", { withCredentials: true });
-      const data = res.data;
+      const res = await api.get("/auth/me", {
+        withCredentials: true,
+        headers: {
+          "Cache-Control": "no-cache",
+        },
+      });
 
-      // The API returns { success: true, user: {...} }
-      const userData = data.user;
-
+      const userData = res.data?.user;
       if (!userData) {
-        console.error("No user data in API response:", data);
         sessionStorage.removeItem(this.USER_KEY);
         return null;
       }
@@ -104,25 +112,20 @@ export class AuthService {
         id: userData.id,
         username: userData.username,
         name: userData.name,
+        whatsapp: userData.whatsapp || "",
         role: userData.role,
         passwordChanged: userData.passwordChanged ?? true,
       };
 
-      // Validate user data before saving
-      if (!user.id || !user.username || !user.role) {
-        console.error("Invalid user data from API:", userData);
-        sessionStorage.removeItem(this.USER_KEY);
-        return null;
-      }
-
       sessionStorage.setItem(this.USER_KEY, JSON.stringify(user));
       return user;
     } catch (err) {
-      console.log("getCurrentUser failed → not authenticated", err);
+      console.log("getCurrentUser failed", err);
       sessionStorage.removeItem(this.USER_KEY);
       return null;
     }
   }
+
 
   /**
    * Background verification to keep cache in sync
@@ -145,6 +148,7 @@ export class AuthService {
         id: userData.id,
         username: userData.username,
         name: userData.name,
+        whatsapp: userData.whatsapp || '', // Add whatsapp field
         role: userData.role,
         passwordChanged: userData.passwordChanged ?? true,
       };

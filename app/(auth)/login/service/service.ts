@@ -13,6 +13,7 @@ export interface LoginResponse {
     id: string;
     name: string;
     username: string;
+    whatsapp: string;
     role: "KASIR" | "ADMIN";
     passwordChanged: boolean;
   };
