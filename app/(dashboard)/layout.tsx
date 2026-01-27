@@ -1,7 +1,7 @@
 // app/(dashboard)/layout.tsx
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { AuthProvider } from "@/components/auth-provider";
+import { AuthProvider } from "@/app/contexts/auth-context";
 
 export default function DashboardLayout({
     children,
@@ -11,7 +11,7 @@ export default function DashboardLayout({
     return (
         <AuthProvider>
             <SidebarProvider>
-                <AppSidebar/>
+                <AppSidebar />
                 <main className="w-full">
                     <SidebarTrigger />
                     {children}

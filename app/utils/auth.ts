@@ -1,103 +1,169 @@
 // app/utils/auth.ts
-import { AppRole } from "./role";
+import { LoginResponse, loginService } from "../(auth)/login/service/service"; // adjust path if needed
+import { api } from "@/lib/api";
 
 export type User = {
   id: string;
   username: string;
-  role: AppRole;
+  name: string;
+  role: "ADMIN" | "KASIR";
+  passwordChanged: boolean;
 };
 
-// Dummy users for testing
-const DUMMY_USERS = [
-  { id: "1", username: "admin", password: "admin123", role: "ADMIN" as AppRole },
-  { id: "2", username: "kasir", password: "kasir123", role: "KASIR" as AppRole },
-];
-
 export class AuthService {
-  private static TOKEN_KEY = "auth_token";
-  private static USER_KEY = "auth_user";
+  private static USER_KEY = "auth_user_data";
 
-  // Login function
-  static async login(username: string, password: string): Promise<{ success: boolean; user?: User; error?: string }> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const user = DUMMY_USERS.find(
-      u => u.username === username && u.password === password
-    );
-
-    if (!user) {
-      return { success: false, error: "Username atau password salah" };
-    }
-
-    // Create a simple token (in real app, this comes from backend)
-    const token = btoa(JSON.stringify({ id: user.id, timestamp: Date.now() }));
-    
-    // Store in localStorage
-    if (typeof window !== "undefined") {
-      localStorage.setItem(this.TOKEN_KEY, token);
-      localStorage.setItem(this.USER_KEY, JSON.stringify({
-        id: user.id,
-        username: user.username,
-        role: user.role,
-      }));
-      
-      // Also set cookie for middleware (expires in 7 days)
-      const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + 7);
-      document.cookie = `auth_token=${token}; path=/; expires=${expiryDate.toUTCString()}`;
-    }
-
-    return { 
-      success: true, 
-      user: { id: user.id, username: user.username, role: user.role } 
-    };
-  }
-
-  // Logout function
-  static logout(): void {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(this.TOKEN_KEY);
-      localStorage.removeItem(this.USER_KEY);
-      
-      // Remove cookie
-      document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC";
-    }
-  }
-
-  // Check if user is authenticated
-  static isAuthenticated(): boolean {
-    if (typeof window === "undefined") return false;
-    return !!localStorage.getItem(this.TOKEN_KEY);
-  }
-
-  // Get current user
-  static getCurrentUser(): User | null {
-    if (typeof window === "undefined") return null;
-    const userStr = localStorage.getItem(this.USER_KEY);
-    if (!userStr) return null;
-    
+  static async login(
+    username: string,
+    password: string
+  ): Promise<{ success: boolean; user?: User; error?: string }> {
     try {
-      return JSON.parse(userStr);
+      const response = await loginService.login({ username, password });
+      const user: User = {
+        id: response.user.id,
+        username: response.user.username,
+        name: response.user.name,
+        role: response.user.role,
+        passwordChanged: response.user.passwordChanged,
+      };
+
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(this.USER_KEY, JSON.stringify(user));
+      }
+
+      return { success: true, user };
+    } catch (error: any) {
+      console.error("Login failed:", error);
+      const message =
+        error.response?.data?.message ||
+        (error.response?.status === 401 ? "Username atau password salah" : "Login gagal");
+
+      return { success: false, error: message };
+    }
+  }
+
+  static async logout(): Promise<void> {
+    try {
+      await api.post("/auth/logout", {}, { withCredentials: true });
+    } catch (err) {
+      console.warn("Logout API failed:", err);
+    } finally {
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(this.USER_KEY);
+      }
+    }
+  }
+
+  static async isAuthenticated(): Promise<boolean> {
+    try {
+      await api.get("/auth/me", { withCredentials: true });
+      return true;
     } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Returns the current user, preferring cached value for speed,
+   * but verifies with /me in background if possible.
+   */
+  static async getCurrentUser(): Promise<User | null> {
+    if (typeof window === "undefined") return null;
+
+    // 1. Try to get from sessionStorage first (fast & optimistic)
+    const cached = sessionStorage.getItem(this.USER_KEY);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached) as User;
+        // Quick shape validation
+        if (parsed.id && parsed.role && ["ADMIN", "KASIR"].includes(parsed.role)) {
+          // Verify in background (fire-and-forget)
+          this._verifyAndUpdateInBackground();
+          return parsed;
+        }
+      } catch (e) {
+        console.warn("Invalid cached user data", e);
+      }
+    }
+
+    // 2. No valid cache → fetch from /me
+    try {
+      const res = await api.get("/auth/me", { withCredentials: true });
+      const data = res.data;
+
+      // The API returns { success: true, user: {...} }
+      const userData = data.user;
+
+      if (!userData) {
+        console.error("No user data in API response:", data);
+        sessionStorage.removeItem(this.USER_KEY);
+        return null;
+      }
+
+      const user: User = {
+        id: userData.id,
+        username: userData.username,
+        name: userData.name,
+        role: userData.role,
+        passwordChanged: userData.passwordChanged ?? true,
+      };
+
+      // Validate user data before saving
+      if (!user.id || !user.username || !user.role) {
+        console.error("Invalid user data from API:", userData);
+        sessionStorage.removeItem(this.USER_KEY);
+        return null;
+      }
+
+      sessionStorage.setItem(this.USER_KEY, JSON.stringify(user));
+      return user;
+    } catch (err) {
+      console.log("getCurrentUser failed → not authenticated", err);
+      sessionStorage.removeItem(this.USER_KEY);
       return null;
     }
   }
 
-  // Get token
-  static getToken(): string | null {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem(this.TOKEN_KEY);
+  /**
+   * Background verification to keep cache in sync
+   */
+  private static async _verifyAndUpdateInBackground(): Promise<void> {
+    try {
+      const res = await api.get("/auth/me", { withCredentials: true });
+      const data = res.data;
+
+      // The API returns { success: true, user: {...} }
+      const userData = data.user;
+
+      if (!userData) {
+        console.warn("No user data in background verification");
+        sessionStorage.removeItem(this.USER_KEY);
+        return;
+      }
+
+      const user: User = {
+        id: userData.id,
+        username: userData.username,
+        name: userData.name,
+        role: userData.role,
+        passwordChanged: userData.passwordChanged ?? true,
+      };
+
+      // Validate before updating
+      if (user.id && user.username && user.role) {
+        sessionStorage.setItem(this.USER_KEY, JSON.stringify(user));
+      }
+    } catch (err) {
+      console.warn("Background user verification failed", err);
+      // If verification fails, clear the cache
+      sessionStorage.removeItem(this.USER_KEY);
+    }
   }
 
-  // Check if user has required role
-  static hasRole(requiredRole: AppRole): boolean {
-    const user = this.getCurrentUser();
+  static async hasRole(requiredRole: "ADMIN" | "KASIR"): Promise<boolean> {
+    const user = await this.getCurrentUser();
     if (!user) return false;
-    
-    // Admin has access to everything
     if (user.role === "ADMIN") return true;
-    
     return user.role === requiredRole;
   }
 }

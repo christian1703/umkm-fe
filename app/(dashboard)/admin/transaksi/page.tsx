@@ -153,7 +153,7 @@ export default function AdminTransactionsPage() {
 
           {/* SCROLL AREA */}
           <div className="px-6 py-4 max-h-[80vh] overflow-auto space-y-6">
-            {detailData && <AppListView data={detailData} blacklist={['detail', 'isDeleted']} />}
+            {detailData && <AppListView data={detailData} blacklist={['detail', 'isDeleted', 'file']} />}
 
 
             <Card className="w-full max-w-sm border-0">

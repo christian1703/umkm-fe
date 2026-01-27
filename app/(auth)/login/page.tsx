@@ -6,7 +6,14 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 import { AuthService } from "@/app/utils/auth";
@@ -21,10 +28,11 @@ export default function LoginPage() {
 
   // Check if user is already authenticated
   useEffect(() => {
-    const checkAuth = () => {
-      const user = AuthService.getCurrentUser();
-      
-      if (user) {
+    const checkAuth = async () => {
+      const isAuthenticated = await AuthService.isAuthenticated();
+      const user = await AuthService.getCurrentUser();
+
+      if (isAuthenticated && user) {
         // Already logged in, redirect to appropriate dashboard
         if (user.role === "ADMIN") {
           router.push("/admin/home");
@@ -51,18 +59,31 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (!username.trim() || !password.trim()) {
+      setError("Username dan password harus diisi");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const result = await AuthService.login(username, password);
 
       if (result.success && result.user) {
-        router.push('/')
+        // Redirect based on password status and role
+        if (!result.user.passwordChanged) {
+          router.push("/change-password");
+        } else {
+          const dest = result.user.role === "ADMIN" ? "/admin/home" : "/kasir/transaksi";
+          router.push(dest);
+        }
         router.refresh();
       } else {
         setError(result.error || "Login gagal");
       }
     } catch (err) {
+      console.error("Login error:", err);
       setError("Terjadi kesalahan. Silakan coba lagi.");
     } finally {
       setIsLoading(false);
@@ -70,7 +91,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:from-slate-900 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">
@@ -80,14 +101,14 @@ export default function LoginPage() {
             Masuk ke akun Anda untuk melanjutkan
           </CardDescription>
         </CardHeader>
-        <div>
+        <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            
+
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
               <Input
@@ -98,6 +119,7 @@ export default function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 disabled={isLoading}
+                autoComplete="username"
               />
             </div>
 
@@ -111,22 +133,13 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
+                autoComplete="current-password"
               />
-            </div>
-
-            <div className="text-sm text-muted-foreground bg-slate-50 dark:bg-slate-900 p-3 rounded-md space-y-1">
-              <p className="font-semibold">Demo Credentials:</p>
-              <p>Admin: admin / admin123</p>
-              <p>Kasir: kasir / kasir123</p>
             </div>
           </CardContent>
 
           <CardFooter>
-            <Button 
-              onClick={handleSubmit}
-              className="w-full" 
-              disabled={isLoading}
-            >
+            <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -137,7 +150,7 @@ export default function LoginPage() {
               )}
             </Button>
           </CardFooter>
-        </div>
+        </form>
       </Card>
     </div>
   );

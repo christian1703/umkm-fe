@@ -2,37 +2,55 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  
-  // Redirect root to login
-  if (pathname === '/') {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
-  
-  // Get token from cookies
-  const token = request.cookies.get('auth_token')?.value;
-  
-  const isAuthRoute = pathname.startsWith('/login');
+
+  // Get auth token from HTTP-only cookie
+  const token = request.cookies.get('token')?.value;
+
+  // Define route types
+  const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/change-password');
   const isAdminRoute = pathname.startsWith('/admin');
   const isKasirRoute = pathname.startsWith('/kasir');
   const isProtectedRoute = isAdminRoute || isKasirRoute;
+  const isRootRoute = pathname === '/';
 
-  // If accessing login while authenticated, redirect to dashboard
-  // Note: Since we're using localStorage, the client-side check in the login page
-  // will handle the actual redirect based on role
-  if (isAuthRoute && token) {
+  // Redirect root to login if not authenticated, or to dashboard if authenticated
+  if (isRootRoute) {
+    if (token) {
+      // User is authenticated, redirect to default dashboard
+      // You might want to decode the token to get role, or make an API call
+      return NextResponse.redirect(new URL('/admin/home', request.url));
+    }
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // If user is authenticated and tries to access login page (but not change-password)
+  if (pathname.startsWith('/login') && token) {
     return NextResponse.redirect(new URL('/admin/home', request.url));
   }
 
-  // If accessing protected route without token, redirect to login
+  // If user is not authenticated and tries to access protected routes, redirect to login
   if (isProtectedRoute && !token) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('from', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  // Allow change-password route if authenticated
+  if (pathname.startsWith('/change-password') && !token) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // Create response and ensure credentials are included
+  const response = NextResponse.next();
+  
+  // Add CORS headers if needed for API routes
+  if (pathname.startsWith('/api')) {
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+  }
+
+  return response;
 }
 
 export const config = {
@@ -43,7 +61,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - public folder files
      */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\..*|_next).*)',
   ],
 };

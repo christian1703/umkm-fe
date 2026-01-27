@@ -56,26 +56,31 @@ export default function AppListView({
 }
 
 /* ---------------- helpers ---------------- */
-
 function formatKey(key: string) {
-  return key.replace(/_/g, " ")
+  return key
+    // handle snake_case → snake case
+    .replace(/_/g, " ")
+    // handle camelCase / PascalCase → camel Case
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    // rapihin kapitalisasi
+    .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 function renderValue(key: string, value: any) {
   if (value === null || value === undefined) return "-"
-  
+
   const lowerKey = key.toLowerCase()
-  
+
   // Check if key includes 'date'
   if (lowerKey.includes("date")) {
     return formatDateTime(value)
   }
-  
+
   // Check if key includes 'amount'
   if (lowerKey.includes("amount")) {
     return formatIDR(value)
   }
-  
+
   if (typeof value === "boolean") return value ? "Yes" : "No"
   if (Array.isArray(value)) return value.length ? value.join(", ") : "-"
   if (typeof value === "object") return JSON.stringify(value)
