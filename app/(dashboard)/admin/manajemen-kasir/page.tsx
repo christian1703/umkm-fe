@@ -65,7 +65,8 @@ export default function AdminKasirPage() {
         name: form.name,
         username: form.username,
         whatsapp: form.whatsapp,
-        role: "KASIR"
+        role: "KASIR",
+        password: ''
       });
 
       toast.success("Berhasil Membuat Kasir")

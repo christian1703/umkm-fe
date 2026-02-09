@@ -10,19 +10,21 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    const user = AuthService.getCurrentUser();
-    
-    if (user) {
-      // Redirect based on role
-      if (user.role === "ADMIN") {
-        router.push("/admin/home");
+    const checkAuth = async () => {
+      const user = await AuthService.getCurrentUser();
+
+      if (user) {
+        if (user.role === "ADMIN") {
+          router.push("/admin/home");
+        } else {
+          router.push("/kasir/transaksi");
+        }
       } else {
-        router.push("/kasir/transaksi");
+        router.push("/login");
       }
-    } else {
-      // Not logged in, go to login
-      router.push("/login");
-    }
+    };
+
+    checkAuth();
   }, [router]);
 
   return (

@@ -9,7 +9,7 @@ import { useDashboardData } from "./hooks/useDashboard";
 import { DataTable, Field } from "@/components/app-table";
 
 export default function AdminDashboardPage() {
-  const [timeFilter, setTimeFilter] = useState<'today' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'>("today");
+  const [timeFilter, setTimeFilter] = useState<'today' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | any>("today");
   const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 6)).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -18,7 +18,6 @@ export default function AdminDashboardPage() {
   const [appliedEndDate, setAppliedEndDate] = useState(endDate);
 
   const { dashboardData, isLoading, error, refetch } = useDashboardData({
-    timeFilter,
     ...(timeFilter === 'custom' ? { startDate: appliedStartDate, endDate: appliedEndDate } : {}),
   });
 
